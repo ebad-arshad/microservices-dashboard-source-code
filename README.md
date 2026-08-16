@@ -190,6 +190,18 @@ docker compose up -d --build
 docker compose ps
 ```
 
+### Application Access URLs (5 Primary Entry Points)
+
+When running locally with default configuration, **5 distinct URLs** are exposed and accessible on host ports:
+
+| Service / Interface | Primary Access URL | Host Port | Description |
+| :--- | :--- | :--- | :--- |
+| **1. React Dashboard (Frontend UI)** | `http://localhost` | `80` (or `${FRONTEND_PORT}`) | Main user dashboard for task management, caching operations, and job triggers. |
+| **2. Interactive OpenAPI Docs (Swagger)** | `http://localhost:8000/docs` | `8000` (or `${BACKEND_PORT}`) | Interactive Swagger UI for testing API endpoints live. |
+| **3. Alternative API Documentation (ReDoc)** | `http://localhost:8000/redoc` | `8000` (or `${BACKEND_PORT}`) | Structured ReDoc API specification interface. |
+| **4. Backend Health Probe** | `http://localhost:8000/healthz` | `8000` (or `${BACKEND_PORT}`) | Returns JSON health status of PostgreSQL & Redis DB connections. |
+| **5. Worker Health Probe** | `http://localhost:8002/healthz` | `8002` (or `${WORKER_PORT}`) | Returns JSON health status of Background Worker node. |
+
 ### Automated Test Suite Execution
 
 The stack includes a production verification script `test-stack.sh` that automatically runs a 15-feature check covering API readiness, Cache HIT/MISS verification, cache mutation purging, database payload integrity, and background job queueing:
