@@ -1,23 +1,21 @@
-# Stage 1: Build stage
-FROM python:3.11-alpine AS builder
+# Stage 1: Builder stage
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-RUN apk --no-cache upgrade && \
-    apk add --no-cache gcc musl-dev libpq-dev
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 
-RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
-FROM python:3.11-alpine
+FROM python:3.11-slim
 
-RUN apk --no-cache upgrade && \
-    apk add --no-cache libpq
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /home/appuser -m appuser
 
 WORKDIR /app
 
