@@ -31,7 +31,7 @@ def get_db_conn():
         user=DB_USER,
         password=DB_PASS,
         dbname=DB_NAME,
-        cursor_factory=RealDictCursor
+        cursor_factory=RealDictCursor,
     )
 
 
@@ -43,7 +43,7 @@ def init_redis():
                 host=REDIS_HOST,
                 port=REDIS_PORT,
                 password=REDIS_PASS,
-                decode_responses=True
+                decode_responses=True,
             )
             rdb_client.ping()
             print("[Worker] Connected to Redis successfully.")
@@ -56,7 +56,13 @@ def init_redis():
 def redis_queue_consumer():
     global processed_jobs_count
     init_redis()
-    print("[Worker] Queue consumer thread started, listening on 'job_queue'...")
+    msg = " ".join(
+        [
+            "[Worker] Queue consumer thread started,",
+            "listening on 'job_queue'...",
+        ]
+    )
+    print(msg)
 
     while True:
         try:
@@ -80,24 +86,34 @@ def redis_queue_consumer():
             try:
                 conn = get_db_conn()
                 with conn.cursor() as cur:
-                    cur.execute("UPDATE jobs SET status = 'processing' WHERE id = %s", (job_id,))
+                    sql = "UPDATE jobs SET status = 'processing' WHERE id = %s"
+                    cur.execute(sql, (job_id,))
                     conn.commit()
                 conn.close()
             except Exception as e:
                 print(f"[Worker] DB status update error (processing): {e}")
 
-            # Simulate background execution (e.g. data export / report generation)
+            # Simulate background execution
             time.sleep(1.5)
             completed_time = datetime.now(timezone.utc).isoformat()
-            result_summary = f"Successfully generated '{job_type}' report at {completed_time}. Processed 100% of data."
+            res_parts = [
+                f"Successfully generated '{job_type}' report at",
+                f"{completed_time}. Processed 100% of data.",
+            ]
+            result_summary = " ".join(res_parts)
 
             # Update status to completed in DB
             try:
                 conn = get_db_conn()
                 with conn.cursor() as cur:
+                    sql_parts = [
+                        "UPDATE jobs SET status = 'completed',",
+                        "result = %s, completed_at = %s WHERE id = %s",
+                    ]
+                    sql = " ".join(sql_parts)
                     cur.execute(
-                        "UPDATE jobs SET status = 'completed', result = %s, completed_at = %s WHERE id = %s",
-                        (result_summary, completed_time, job_id)
+                        sql,
+                        (result_summary, completed_time, job_id),
                     )
                     conn.commit()
                 conn.close()
@@ -143,7 +159,7 @@ class WorkerHealthHandler(BaseHTTPRequestHandler):
             "worker": "running",
             "redis": redis_ok,
             "processed_jobs": processed_jobs_count,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         self.wfile.write(json.dumps(resp).encode("utf-8"))
 
@@ -156,6 +172,9 @@ def run_http_server():
 
 
 if __name__ == "__main__":
-    consumer_thread = threading.Thread(target=redis_queue_consumer, daemon=True)
+    consumer_thread = threading.Thread(
+        target=redis_queue_consumer,
+        daemon=True,
+    )
     consumer_thread.start()
     run_http_server()

@@ -35,7 +35,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Cache", "X-Cache-Source"]
+    expose_headers=["X-Cache", "X-Cache-Source"],
 )
 
 
@@ -81,7 +81,7 @@ def get_db_conn():
         user=DB_USER,
         password=DB_PASS,
         dbname=DB_NAME,
-        cursor_factory=RealDictCursor
+        cursor_factory=RealDictCursor,
     )
 
 
@@ -91,7 +91,7 @@ def get_redis_client():
         host=REDIS_HOST,
         port=REDIS_PORT,
         password=REDIS_PASS,
-        decode_responses=True
+        decode_responses=True,
     )
 
 
@@ -117,20 +117,22 @@ def startup_db_migration():
                         title VARCHAR(255) NOT NULL,
                         description TEXT,
                         status VARCHAR(50) NOT NULL DEFAULT 'pending',
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                        created_at TIMESTAMP WITH TIME ZONE
+                            DEFAULT CURRENT_TIMESTAMP
                     );
                     CREATE TABLE IF NOT EXISTS jobs (
                         id VARCHAR(255) PRIMARY KEY,
                         type VARCHAR(100) NOT NULL,
                         status VARCHAR(50) NOT NULL DEFAULT 'pending',
                         result TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        created_at TIMESTAMP WITH TIME ZONE
+                            DEFAULT CURRENT_TIMESTAMP,
                         completed_at TIMESTAMP WITH TIME ZONE
                     );
                 """)
                 conn.commit()
             conn.close()
-            print("PostgreSQL database auto-migrations completed successfully.")
+            print("PostgreSQL db auto-migrations completed successfully.")
             return
         except Exception as e:
             print(f"Waiting for PostgreSQL... retry {i+1}/{max_retries} ({e})")
@@ -157,7 +159,7 @@ def healthz(response: Response):
     except Exception as e:
         redis_status = f"disconnected: {e}"
 
-    is_healthy = (db_status == "connected" and redis_status == "connected")
+    is_healthy = db_status == "connected" and redis_status == "connected"
     if not is_healthy:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -165,7 +167,7 @@ def healthz(response: Response):
         "status": "healthy" if is_healthy else "unhealthy",
         "database": db_status,
         "redis": redis_status,
-        "time": datetime.now(timezone.utc).isoformat()
+        "time": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -174,7 +176,7 @@ def healthz(response: Response):
 def get_items(
     response: Response,
     status_filter: Optional[str] = Query(None, alias="status"),
-    q: Optional[str] = Query(None)
+    q: Optional[str] = Query(None),
 ):
     # Only use Cache-Aside for unfiltered full list query
     is_unfiltered = not status_filter and not q
@@ -194,7 +196,11 @@ def get_items(
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
-            query = "SELECT id, title, description, status, created_at FROM items"
+            q_parts = [
+                "SELECT id, title, description, status,",
+                "created_at FROM items",
+            ]
+            query = " ".join(q_parts)
             params = []
             conditions = []
 
@@ -203,7 +209,9 @@ def get_items(
                 params.append(status_filter.lower())
 
             if q:
-                conditions.append("(LOWER(title) LIKE %s OR LOWER(description) LIKE %s)")
+                conditions.append(
+                    "(LOWER(title) LIKE %s OR LOWER(description) LIKE %s)"
+                )
                 params.append(f"%{q.lower()}%")
                 params.append(f"%{q.lower()}%")
 
@@ -218,18 +226,20 @@ def get_items(
 
         items = []
         for r in rows:
-            created_str = (
-                r["created_at"].isoformat()
-                if isinstance(r["created_at"], datetime)
-                else str(r["created_at"])
+            created_dt = r["created_at"]
+            if isinstance(created_dt, datetime):
+                created_str = created_dt.isoformat()
+            else:
+                created_str = str(created_dt)
+            items.append(
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "description": r["description"] or "",
+                    "status": r["status"],
+                    "created_at": created_str,
+                }
             )
-            items.append({
-                "id": r["id"],
-                "title": r["title"],
-                "description": r["description"] or "",
-                "status": r["status"],
-                "created_at": created_str
-            })
 
         # Cache unfiltered result in Redis
         if is_unfiltered:
@@ -244,7 +254,8 @@ def get_items(
         return items
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database query error: {e}")
+        err_msg = f"Database query error: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 2. CREATE ITEM (POST /api/items)
@@ -256,14 +267,19 @@ def create_item(item: ItemCreate):
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
-            sql = (
-                "INSERT INTO items (title, description, status) "
-                "VALUES (%s, %s, %s) "
-                "RETURNING id, title, description, status, created_at"
-            )
+            sql_parts = [
+                "INSERT INTO items (title, description, status)",
+                "VALUES (%s, %s, %s)",
+                "RETURNING id, title, description, status, created_at",
+            ]
+            sql = " ".join(sql_parts)
             cur.execute(
                 sql,
-                (item.title.strip(), item.description or "", item.status or "pending")
+                (
+                    item.title.strip(),
+                    item.description or "",
+                    item.status or "pending",
+                ),
             )
             new_row = cur.fetchone()
             conn.commit()
@@ -271,20 +287,22 @@ def create_item(item: ItemCreate):
 
         invalidate_items_cache()
 
-        created_str = (
-            new_row["created_at"].isoformat()
-            if isinstance(new_row["created_at"], datetime)
-            else str(new_row["created_at"])
-        )
+        created_dt = new_row["created_at"]
+        if isinstance(created_dt, datetime):
+            created_str = created_dt.isoformat()
+        else:
+            created_str = str(created_dt)
+
         return {
             "id": new_row["id"],
             "title": new_row["title"],
             "description": new_row["description"] or "",
             "status": new_row["status"],
-            "created_at": created_str
+            "created_at": created_str,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create item: {e}")
+        err_msg = f"Failed to create item: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 3. UPDATE ITEM (PUT /api/items/{item_id})
@@ -293,43 +311,63 @@ def update_item(item_id: int, item: ItemUpdate):
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
-            cur.execute("SELECT id, title, description, status FROM items WHERE id = %s", (item_id,))
+            sel_parts = [
+                "SELECT id, title, description, status",
+                "FROM items WHERE id = %s",
+            ]
+            sql_sel = " ".join(sel_parts)
+            cur.execute(sql_sel, (item_id,))
             existing = cur.fetchone()
             if not existing:
                 conn.close()
                 raise HTTPException(status_code=404, detail="Item not found")
 
-            new_title = item.title if item.title is not None else existing["title"]
-            new_desc = item.description if item.description is not None else existing["description"]
-            new_status = item.status if item.status is not None else existing["status"]
+            if item.title is not None:
+                new_title = item.title
+            else:
+                new_title = existing["title"]
 
-            sql = (
-                "UPDATE items SET title = %s, description = %s, status = %s "
-                "WHERE id = %s RETURNING id, title, description, status, created_at"
-            )
-            cur.execute(sql, (new_title, new_desc, new_status, item_id))
+            if item.description is not None:
+                new_desc = item.description
+            else:
+                new_desc = existing["description"]
+
+            if item.status is not None:
+                new_status = item.status
+            else:
+                new_status = existing["status"]
+
+            upd_parts = [
+                "UPDATE items SET title = %s, description = %s,",
+                "status = %s WHERE id = %s RETURNING id, title,",
+                "description, status, created_at",
+            ]
+            sql_upd = " ".join(upd_parts)
+            cur.execute(sql_upd, (new_title, new_desc, new_status, item_id))
             updated_row = cur.fetchone()
             conn.commit()
         conn.close()
 
         invalidate_items_cache()
 
-        created_str = (
-            updated_row["created_at"].isoformat()
-            if isinstance(updated_row["created_at"], datetime)
-            else str(updated_row["created_at"])
-        )
+        created_dt = updated_row["created_at"]
+        if isinstance(created_dt, datetime):
+            created_str = created_dt.isoformat()
+        else:
+            created_str = str(created_dt)
+
         return {
             "id": updated_row["id"],
             "title": updated_row["title"],
             "description": updated_row["description"] or "",
             "status": updated_row["status"],
-            "created_at": created_str
+            "created_at": created_str,
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update item: {e}")
+        err_msg = f"Failed to update item: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 4. DELETE ITEM (DELETE /api/items/{item_id})
@@ -338,7 +376,8 @@ def delete_item(item_id: int):
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM items WHERE id = %s RETURNING id", (item_id,))
+            sql_del = "DELETE FROM items WHERE id = %s RETURNING id"
+            cur.execute(sql_del, (item_id,))
             deleted = cur.fetchone()
             conn.commit()
         conn.close()
@@ -352,7 +391,8 @@ def delete_item(item_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete item: {e}")
+        err_msg = f"Failed to delete item: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 5. ONE-CLICK CACHE PURGE (POST /api/cache/purge)
@@ -363,10 +403,11 @@ def purge_cache():
         rdb.delete(CACHE_KEY_ALL)
         return {
             "message": "Redis cache purged successfully",
-            "purged_keys": [CACHE_KEY_ALL]
+            "purged_keys": [CACHE_KEY_ALL],
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to purge Redis cache: {e}")
+        err_msg = f"Failed to purge Redis cache: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 6. TRIGGER BACKGROUND JOB (POST /api/jobs)
@@ -380,10 +421,12 @@ def trigger_job(job_in: JobCreate):
         # Save pending job to PostgreSQL
         conn = get_db_conn()
         with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO jobs (id, type, status, created_at) VALUES (%s, %s, %s, %s)",
-                (job_id, job_type, "pending", created_at)
-            )
+            ins_parts = [
+                "INSERT INTO jobs (id, type, status, created_at)",
+                "VALUES (%s, %s, %s, %s)",
+            ]
+            sql_ins = " ".join(ins_parts)
+            cur.execute(sql_ins, (job_id, job_type, "pending", created_at))
             conn.commit()
         conn.close()
 
@@ -392,7 +435,7 @@ def trigger_job(job_in: JobCreate):
         job_payload = {
             "id": job_id,
             "type": job_type,
-            "created_at": created_at
+            "created_at": created_at,
         }
         rdb.rpush("job_queue", json.dumps(job_payload))
 
@@ -400,10 +443,11 @@ def trigger_job(job_in: JobCreate):
             "id": job_id,
             "type": job_type,
             "status": "pending",
-            "message": "Background job queued successfully"
+            "message": "Background job queued successfully",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to queue background job: {e}")
+        err_msg = f"Failed to queue background job: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 # 7. GET JOBS (GET /api/jobs)
@@ -412,34 +456,42 @@ def get_jobs():
     try:
         conn = get_db_conn()
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, type, status, result, created_at, completed_at "
-                "FROM jobs ORDER BY created_at DESC LIMIT 20"
-            )
+            job_parts = [
+                "SELECT id, type, status, result, created_at, completed_at",
+                "FROM jobs ORDER BY created_at DESC LIMIT 20",
+            ]
+            sql_jobs = " ".join(job_parts)
+            cur.execute(sql_jobs)
             rows = cur.fetchall()
         conn.close()
 
         jobs = []
         for r in rows:
-            c_str = (
-                r["created_at"].isoformat()
-                if isinstance(r["created_at"], datetime)
-                else str(r["created_at"])
-            )
+            c_dt = r["created_at"]
+            if isinstance(c_dt, datetime):
+                c_str = c_dt.isoformat()
+            else:
+                c_str = str(c_dt)
+
             comp_dt = r["completed_at"]
-            comp_str = (
-                comp_dt.isoformat()
-                if isinstance(comp_dt, datetime)
-                else (str(comp_dt) if comp_dt else None)
+            if isinstance(comp_dt, datetime):
+                comp_str = comp_dt.isoformat()
+            elif comp_dt:
+                comp_str = str(comp_dt)
+            else:
+                comp_str = None
+
+            jobs.append(
+                {
+                    "id": r["id"],
+                    "type": r["type"],
+                    "status": r["status"],
+                    "result": r["result"],
+                    "created_at": c_str,
+                    "completed_at": comp_str,
+                }
             )
-            jobs.append({
-                "id": r["id"],
-                "type": r["type"],
-                "status": r["status"],
-                "result": r["result"],
-                "created_at": c_str,
-                "completed_at": comp_str
-            })
         return jobs
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch jobs: {e}")
+        err_msg = f"Failed to fetch jobs: {e}"
+        raise HTTPException(status_code=500, detail=err_msg)
