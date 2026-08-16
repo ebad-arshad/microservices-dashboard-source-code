@@ -23,6 +23,7 @@ PORT = int(os.environ.get("PORT", 8002))
 processed_jobs_count = 0
 rdb_client = None
 
+
 def get_db_conn():
     return psycopg2.connect(
         host=DB_HOST,
@@ -32,6 +33,7 @@ def get_db_conn():
         dbname=DB_NAME,
         cursor_factory=RealDictCursor
     )
+
 
 def init_redis():
     global rdb_client
@@ -49,6 +51,7 @@ def init_redis():
         except Exception as e:
             print(f"[Worker] Waiting for Redis... ({e})")
             time.sleep(2)
+
 
 def redis_queue_consumer():
     global processed_jobs_count
@@ -108,6 +111,7 @@ def redis_queue_consumer():
             print(f"[Worker] Exception in queue consumer loop: {e}")
             time.sleep(2)
 
+
 class WorkerHealthHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -143,11 +147,13 @@ class WorkerHealthHandler(BaseHTTPRequestHandler):
         }
         self.wfile.write(json.dumps(resp).encode("utf-8"))
 
+
 def run_http_server():
     server_address = ("", PORT)
     httpd = HTTPServer(server_address, WorkerHealthHandler)
     print(f"[Worker] Health HTTP server listening on port {PORT}...")
     httpd.serve_forever()
+
 
 if __name__ == "__main__":
     consumer_thread = threading.Thread(target=redis_queue_consumer, daemon=True)
