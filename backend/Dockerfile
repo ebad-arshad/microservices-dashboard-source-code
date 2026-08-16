@@ -1,20 +1,19 @@
-# Stage 1: Builder stage
-FROM python:3.15.0rc1-alpine AS builder
+# Stage 1: Build stage
+FROM python:3.12-alpine AS builder
 
 WORKDIR /app
-
-RUN apk update && apk upgrade --no-cache
-
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
-FROM python:3.15.0rc1-alpine
+FROM python:3.12-alpine
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Create dedicated non-root user
+RUN addgroup -r appgroup && adduser -r -g appgroup -d /app appuser
 
 WORKDIR /app
 
+# Copy dependencies and application code
 COPY --from=builder /install /usr/local
 COPY --chown=appuser:appgroup . .
 

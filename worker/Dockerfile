@@ -1,17 +1,14 @@
-# Stage 1: Builder stage
-FROM python:3.15.0rc1-alpine AS builder
+# Stage 1: Build stage
+FROM python:3.12-alpine AS builder
 
 WORKDIR /app
-
-RUN apk update && apk upgrade --no-cache
-
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
-FROM python:3.15.0rc1-alpine
+FROM python:3.12-alpine
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -r appgroup && adduser -r -g appgroup -d /app appuser
 
 WORKDIR /app
 
@@ -20,9 +17,6 @@ COPY --chown=appuser:appgroup . .
 
 USER appuser
 
-ENV PORT=8002
 ENV PYTHONUNBUFFERED=1
-
-EXPOSE 8002
 
 CMD ["python", "main.py"]
