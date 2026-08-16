@@ -36,36 +36,36 @@ This repository implements a **production-grade, multi-tier event-driven microse
 
 ```mermaid
 flowchart TD
-    subgraph Client Tier
-        Client["🌐 Web Browser / Client App"]
+    subgraph Client_Tier["Client Tier"]
+        Client["Web Browser / Client App"]
     end
 
-    subgraph Infrastructure Edge
-        Nginx["🛡️ Nginx Reverse Proxy (Frontend Container)<br/>Port: ${FRONTEND_PORT:-80} (Internal 8080)<br/>Non-Root User: nginx"]
+    subgraph Infrastructure_Edge["Infrastructure Edge"]
+        Nginx["Nginx Reverse Proxy (Frontend Container)<br/>Port: 80 (Internal 8080)<br/>Non-Root User: nginx"]
     end
 
-    subgraph Compute & Logic Tier
-        API["⚡ FastAPI Backend Service<br/>Port: ${BACKEND_PORT:-8000}<br/>Non-Root User: appuser"]
-        Worker["⚙️ Async Python Background Worker<br/>Port: ${WORKER_PORT:-8002}<br/>Non-Root User: appuser"]
+    subgraph Compute_Tier["Compute & Logic Tier"]
+        API["FastAPI Backend Service<br/>Port: 8000<br/>Non-Root User: appuser"]
+        Worker["Async Python Background Worker<br/>Port: 8002<br/>Non-Root User: appuser"]
     end
 
-    subgraph Data & Messaging Tier
-        Redis["🔴 Redis 7 Cache & Queue<br/>Port: ${REDIS_PORT:-6379}<br/>Key: items:all | Queue: job_queue"]
-        Postgres["🐘 PostgreSQL 16 Database<br/>Port: ${DB_PORT:-5432}<br/>Database: tasksdb"]
+    subgraph Data_Tier["Data & Messaging Tier"]
+        Redis["Redis 7 Cache & Queue<br/>Port: 6379<br/>Key: items:all | Queue: job_queue"]
+        Postgres["PostgreSQL 16 Database<br/>Port: 5432<br/>Database: tasksdb"]
     end
 
     %% Client Routing
-    Client -->|HTTP / SPA Assets| Nginx
-    Client -->|REST API Requests| API
+    Client -->|"HTTP / SPA Assets"| Nginx
+    Client -->|"REST API Requests"| API
 
     %% API Interactions
-    API -->|1. Check / Set Cache-Aside (30s TTL)| Redis
-    API -->|2. Query / Persist Items & Job Metadata| Postgres
-    API -->|3. RPUSH Payload to job_queue| Redis
+    API -->|"1. Check / Set Cache-Aside (30s TTL)"| Redis
+    API -->|"2. Query / Persist Items & Job Metadata"| Postgres
+    API -->|"3. RPUSH Payload to job_queue"| Redis
 
     %% Worker Interactions
-    Worker -->|4. BLPOP Job Payload| Redis
-    Worker -->|5. Update Job Status & Results| Postgres
+    Worker -->|"4. BLPOP Job Payload"| Redis
+    Worker -->|"5. Update Job Status & Results"| Postgres
 ```
 
 ---
