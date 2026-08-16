@@ -1,0 +1,124 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ============================================================
+  # 1. Lint & Static Analysis (Parallel Matrix)
+  # ============================================================
+  lint:
+    name: Lint Services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            type: python
+          - service: worker
+            type: python
+          - service: frontend
+            type: node
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: matrix.type == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Lint Python Code
+        if: matrix.type == 'python'
+        run: |
+          pip install flake8 black
+          flake8 ${{ matrix.service }} --max-line-length=120 --exclude=venv
+          black --check ${{ matrix.service }}
+
+      - name: Setup Node
+        if: matrix.type == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package.json
+
+      - name: Lint Frontend Code
+        if: matrix.type == 'node'
+        run: |
+          cd frontend
+          npm ci
+          # npm run lint (if eslint is configured)
+
+  # ============================================================
+  # 2. Build & Security Scan Container Images (Parallel Matrix)
+  # ============================================================
+  build-and-scan:
+    name: Build & Security Scan
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, worker, frontend]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Local Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          push: false
+          load: true
+          tags: microservice-${{ matrix.service }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: microservice-${{ matrix.service }}:test
+          format: 'table'
+          exit-code: '0' # Set to '1' to block pipeline on HIGH/CRITICAL CVEs
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================
+  # 3. End-to-End Stack Integration Testing
+  # ============================================================
+  integration-test:
+    name: E2E Stack Verification
+    needs: build-and-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Copy Environment File
+        run: cp .env.example .env
+
+      - name: Build and Start Entire Stack
+        run: docker compose up -d --build
+
+      - name: Execute Automated 15-Feature Test Suite
+        run: |
+          chmod +x test-stack.sh
+          ./test-stack.sh
+
+      - name: Inspect Container Logs on Failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Teardown Stack
+        if: always()
+        run: docker compose down -v
