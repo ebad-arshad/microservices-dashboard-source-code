@@ -8,7 +8,10 @@ RUN apk update && apk upgrade --no-cache && \
 
 COPY requirements.txt ./
 
-RUN pip install --no-cache-dir --prefix=/install --upgrade pip "wheel>=0.46.2" "jaraco.context>=6.1.0" setuptools
+# Upgrade build tools globally in builder
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+
+# Install application dependencies into /install
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
@@ -23,7 +26,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy installed packages from builder
+# Copy installed packages from builder directly into standard Python location
 COPY --from=builder /install /usr/local
 COPY . .
 
