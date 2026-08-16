@@ -3,7 +3,7 @@ FROM python:3.15.0rc1-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev libpq-dev
+RUN apk update && apk upgrade --no-cache
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
@@ -11,9 +11,7 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # Stage 2: Runtime stage
 FROM python:3.15.0rc1-alpine
 
-RUN apk --no-cache upgrade && \
-    apk add --no-cache libpq && \
-    addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
