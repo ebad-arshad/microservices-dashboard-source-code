@@ -4,7 +4,9 @@ FROM python:3.11-alpine AS builder
 WORKDIR /app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --user -r requirements.txt
+
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
 FROM python:3.11-alpine
