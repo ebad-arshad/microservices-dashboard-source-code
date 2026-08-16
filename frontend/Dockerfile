@@ -12,6 +12,10 @@ RUN npm run build
 # Stage 2: Production Nginx Server (Unprivileged user execution)
 FROM nginxinc/nginx-unprivileged:alpine3.20-slim
 
+USER root
+RUN apk update && apk upgrade --no-cache
+USER nginx
+
 # Copy build assets to Nginx html directory
 COPY --from=builder /app/dist /usr/share/nginx/html
 
