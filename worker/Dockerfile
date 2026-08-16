@@ -22,10 +22,8 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY . .
 
-RUN chown -R appuser:appgroup /app
-
 # Set permissions
-RUN chown -R appuser:appgroup /app /home/appuser/.local
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
