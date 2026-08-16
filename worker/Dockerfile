@@ -1,28 +1,24 @@
 # Stage 1: Builder stage
-FROM python:3.11-slim AS builder
+FROM python:3.15.0rc1-alpine AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache gcc musl-dev libpq-dev
 
 COPY requirements.txt ./
-
-RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # Stage 2: Runtime stage
-FROM python:3.11-slim
+FROM python:3.15.0rc1-alpine
 
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd -r appgroup && useradd -r -g appgroup -d /home/appuser -m appuser
+RUN apk --no-cache upgrade && \
+    apk add --no-cache libpq && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
 COPY --from=builder /install /usr/local
-COPY . .
-
-RUN chown -R appuser:appgroup /app
+COPY --chown=appuser:appgroup . .
 
 USER appuser
 
