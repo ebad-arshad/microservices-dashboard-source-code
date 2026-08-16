@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine3.20
     container_name: microservice-postgres
     restart: always
     environment:
@@ -21,7 +21,7 @@ services:
       - app-network
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine3.20
     container_name: microservice-redis
     restart: always
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru

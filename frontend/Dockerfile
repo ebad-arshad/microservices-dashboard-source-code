@@ -1,5 +1,5 @@
 # Stage 1: Build React Application
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.20 AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production Nginx Server (Unprivileged user execution)
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:alpine3.20-slim
 
 # Copy build assets to Nginx html directory
 COPY --from=builder /app/dist /usr/share/nginx/html

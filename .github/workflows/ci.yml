@@ -8,7 +8,24 @@ on:
 
 jobs:
   # ============================================================
-  # 1. Lint & Static Analysis (Parallel Matrix)
+  # 1. Secret & Credential Leak Detection (Gitleaks)
+  # ============================================================
+  gitleaks:
+    name: Gitleaks Secret Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================
+  # 2. Lint & Static Analysis (Parallel Matrix)
   # ============================================================
   lint:
     name: Lint Services
@@ -57,11 +74,11 @@ jobs:
           # npm run lint (if eslint is configured)
 
   # ============================================================
-  # 2. Build & Security Scan Container Images (Parallel Matrix)
+  # 3. Build & Security Scan Container Images (Parallel Matrix)
   # ============================================================
   build-and-scan:
     name: Build & Security Scan
-    needs: lint
+    needs: [gitleaks, lint]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -88,13 +105,13 @@ jobs:
         with:
           image-ref: microservice-${{ matrix.service }}:test
           format: 'table'
-          exit-code: '0' # Set to '1' to block pipeline on HIGH/CRITICAL CVEs
+          exit-code: '1' # Set to '1' to block pipeline on HIGH/CRITICAL CVEs
           ignore-unfixed: true
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
 
   # ============================================================
-  # 3. End-to-End Stack Integration Testing
+  # 4. End-to-End Stack Integration Testing
   # ============================================================
   integration-test:
     name: E2E Stack Verification
