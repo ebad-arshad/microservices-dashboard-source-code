@@ -1,5 +1,5 @@
-# Stage 1: Build React Application
-FROM node:20-alpine3.20 AS builder
+# Stage 1: Build stage
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -9,18 +9,19 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Production Nginx Server (Unprivileged user execution)
-FROM nginxinc/nginx-unprivileged:alpine3.20-slim
+# Stage 2: Runtime stage
+FROM nginxinc/nginx-unprivileged:alpine
 
 USER root
-RUN apk update && apk upgrade --no-cache
-USER nginx
+RUN apk --no-cache upgrade
 
-# Copy build assets to Nginx html directory
-COPY --from=builder /app/dist /usr/share/nginx/html
+WORKDIR /usr/share/nginx/html
+RUN rm -rf ./*
 
-# Copy custom Nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/dist .
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+USER 101
 
 EXPOSE 8080
 
